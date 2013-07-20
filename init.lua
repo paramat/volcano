@@ -1,4 +1,4 @@
--- volcano 0.1.0 by paramat
+-- volcano 0.1.1 by paramat
 -- For latest stable Minetest and back to 0.4.6
 -- Depends default
 -- Licenses: Code WTFPL. Textures CC BY-SA. Ash is recoloured default sand by VanessaE 
@@ -9,12 +9,14 @@ local CONDINT = 19 --  -- Conduit forming abm interval
 local CONDCHA = 1 --  -- 1/x chance per ore node directly above lava
 local MAGFINT = 23 --  -- Magma rise fast abm interval
 local MAGFCHA = 1 --  -- 1/x chance per "magma_fast"
+local MAGZINT = 29 --  -- Magma y = zero abm interval
+local MAGZCHA = 1 --  -- 1/x chance per "magma_zero"
 local MAGSINT = 57 --  -- Magma rise slow abm interval
 local MAGSCHA = 2 --  -- 1/x chance per "magma_slow"
 local COOLINT = 17 --  -- Lava flow cooling abm interval
 local COOLCHA = 3 --  -- 1/x chance per "magma_flowing"
 
-local MAXALT = 79 --  -- Maximum y of volcano
+local MAXALT = 63 --  -- Maximum y of volcano
 local MAXRAD = 3 --  -- Maximum radius of vent
 local LAVCHA = 1.5 --  -- Average number of lava flows from vent perimeter
 local ASHTHR = 0.1 --  -- Ash noise threshold 
@@ -23,7 +25,7 @@ local ASHTHR = 0.1 --  -- Ash noise threshold
 
 local SEEDDIFF1 = 3673967
 local OCTAVES1 = 4 -- 
-local PERSISTENCE1 = 0.7 -- 
+local PERSISTENCE1 = 0.6 -- 
 local SCALE1 = 64 -- 
 
 -- Stuff
@@ -34,6 +36,23 @@ volcano = {}
 
 minetest.register_node("volcano:magma_fast", {
 	description = "Magma Rising Fast",
+	inventory_image = minetest.inventorycube("default_lava.png"),
+	tiles = {
+		{name="default_lava_source_animated.png", animation={type="vertical_frames", aspect_w=16, aspect_h=16, length=3.0}}
+	},
+	paramtype = "light",
+	light_source = LIGHT_MAX - 1,
+	walkable = false,
+	pointable = false,
+	diggable = false,
+	buildable_to = true,
+	damage_per_second = 4*2,
+	post_effect_color = {a=192, r=255, g=64, b=0},
+	groups = {lava=3, liquid=2, hot=3, igniter=1},
+})
+
+minetest.register_node("volcano:magma_zero", {
+	description = "Magma Zero",
 	inventory_image = minetest.inventorycube("default_lava.png"),
 	tiles = {
 		{name="default_lava_source_animated.png", animation={type="vertical_frames", aspect_w=16, aspect_h=16, length=3.0}}
@@ -148,7 +167,6 @@ minetest.register_abm({
 		"default:stone_with_mese",
 		"default:stone_with_gold",
 		"default:stone_with_diamond",
-		"default:stone_with_copper",
 	},
 	neighbors = {"default:lava_source", "default:lava_flowing"},
 	interval = CONDINT,
@@ -158,8 +176,8 @@ minetest.register_abm({
 		local x = pos.x
 		local y = pos.y
 		local z = pos.z
-		if env:find_node_near(pos, 2, "volcano:magma_fast") ~= nil
-		or env:find_node_near(pos, 2, "volcano:magma_source") ~= nil or y < -256 then
+		if env:find_node_near(pos, 1, "volcano:magma_fast") ~= nil
+		or env:find_node_near(pos, 1, "volcano:magma_source") ~= nil or y < -256 then
 			return
 		end
 		local nodename = env:get_node({x=x,y=y-1,z=z}).name
@@ -186,8 +204,8 @@ minetest.register_abm({
 		for k = -1, 1 do
 			if i == 0 and k == 0 then
 				if j == 1 then
-					if y >= 0 then
-						env:add_node({x=x,y=y+1,z=z},{name="volcano:magma_slow"})
+					if y == -1 then
+						env:add_node({x=x,y=0,z=z},{name="volcano:magma_zero"})
 					else
 						env:add_node({x=x,y=y+1,z=z},{name="volcano:magma_fast"})
 					end
@@ -200,11 +218,48 @@ minetest.register_abm({
 		end
 		end
 		end
-		print ("[volcano] Magma Rise ("..x.." "..y.." "..z..")")
+		print ("[volcano] Magma rise ("..x.." "..y.." "..z..")")
 	end
 })
 
--- Vent rising above sea level
+-- Magma at y = 0, surface check, conduit from sea level to surface
+
+minetest.register_abm({
+	nodenames = {"volcano:magma_zero"},
+	interval = MAGZINT,
+	chance = MAGZCHA,
+	action = function(pos, node, active_object_count, active_object_count_wider)
+		local env = minetest.env
+		local x = pos.x
+		local z = pos.z
+		local surfy = 1
+		for y = 47, 2, -1 do
+			local nodename = env:get_node({x=x,y=y,z=z}).name
+			if nodename ~= "air" and nodename ~= "ignore" then
+				surfy = y
+				break
+			end
+		end
+		env:add_node({x=x,y=0,z=z},{name="volcano:magma_source"})
+		for y = 1, surfy do
+		local vrad = math.ceil(MAXRAD * y / MAXALT)
+		for i = -vrad, vrad do
+		for k = -vrad, vrad do
+			if math.abs(i) == vrad or math.abs(k) == vrad then
+				env:add_node({x=x+i,y=y,z=z+k},{name="default:obsidian"})
+			elseif y == surfy and i == 0 and k == 0 then
+				env:add_node({x=x,y=surfy,z=z},{name="volcano:magma_slow"})
+			else
+				env:add_node({x=x+i,y=y,z=z+k},{name="volcano:magma_source"})
+			end
+		end
+		end
+		end
+		print ("[volcano] Magma surfaces ("..x.." "..surfy.." "..z..")")
+	end
+})
+
+-- Vent rising above surface
 
 minetest.register_abm({
 	nodenames = {"volcano:magma_slow"},
@@ -213,7 +268,7 @@ minetest.register_abm({
 	action = function(pos, node, active_object_count, active_object_count_wider)
 		local env = minetest.env
 		local y = pos.y
-		local rischa = 1.1 - (y / MAXALT)
+		local rischa = 1.01 - (y / MAXALT)
 		if math.random() > rischa then
 			return
 		end
@@ -235,21 +290,21 @@ minetest.register_abm({
 		end
 		end
 		end
-		print ("[volcano] Vent rise ("..x.." "..y.." "..z..")")
-		minetest.add_particlespawner(MAGSINT * 4, MAGSINT * 2,
+		minetest.add_particlespawner(MAGSINT * 2, MAGSINT * 2,
 			{x=x,y=y+1,z=z}, {x=x,y=y+1,z=z},
 			{x=-3,y=5,z=-3}, {x=3,y=23,z=3},
 			{x=0,y=-9.8,z=0}, {x=0,y=-9.8,z=0},
 			2, 4,
-			2, 4,
+			3, 5,
 			false, "volcano_magma_particle.png")
-		minetest.add_particlespawner(MAGSINT * 4, MAGSINT * 2,
+		minetest.add_particlespawner(MAGSINT * 2, MAGSINT * 2,
 			{x=x-vrad+1,y=y+1,z=z-vrad+1}, {x=x+vrad-1,y=y+1,z=z+vrad-1},
 			{x=0,y=3,z=0}, {x=0,y=5,z=0},
 			{x=0,y=0,z=0}, {x=0,y=0,z=0},
 			7, 11,
-			5, 13,
+			6, 13,
 			false, "volcano_ash_particle.png")
+		print ("[volcano] Vent rise ("..x.." "..y.." "..z..")")
 	end
 })
 
