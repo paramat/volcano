@@ -1,0 +1,17 @@
+{
+    "name": "volcano",
+    "description": "Magma conduits and volcanos.",
+    "keywords": [
+        "volcano",
+        "conduits",
+        "magma"
+    ],
+    "homepage": "https://github.com/paramat/volcano",
+    "forum": "http://forum.minetest.net/viewtopic.php?f=11&t=6578",
+    "screenshots": [
+        "https://cloud.githubusercontent.com/assets/51875/9275196/8a443020-42da-11e5-96e8-1083d8d01a69.png"
+    ],
+    "authors": [
+        "paramat"
+    ]
+}
